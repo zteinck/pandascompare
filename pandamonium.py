@@ -184,6 +184,7 @@ class PandasCompare(object):
         compare_strings_as_floats=False,
         label_template='{label}.{name}',
         include_diff_type=False,
+        allow_duplicates=False,
         verbose=False,
         ):
         '''
@@ -238,6 +239,8 @@ class PandasCompare(object):
             as appropriate and the name corresponds with the column name.
         include_diff_type : bool
             if True, the column denoting the difference type 'value'/'type' is included in the reports
+        allow_duplicates : bool
+            if True, duplicates in the index are allowed
         verbose : bool
             if True, information will be printed
         '''
@@ -245,6 +248,7 @@ class PandasCompare(object):
         self.DataFrame.join_on = join_on
         self.DataFrame.infer_dtypes = infer_dtypes
         self.DataFrame.label_template = label_template
+        self.DataFrame.allow_duplicates = allow_duplicates
 
         # set instance atrributes
         self.left = self.DataFrame(left, left_label, left_ref)
@@ -303,6 +307,8 @@ class PandasCompare(object):
             see documentation above
         infer_dtypes : bool | callable
             see documentation above
+        allow_duplicates : bool
+            see documentation above
 
         Instance Attributes
         --------------------
@@ -343,7 +349,7 @@ class PandasCompare(object):
                 self.join_on = self.df.index.names = ['index']
 
             # verify there are no duplicate index values which can cause issues
-            self.verify_no_duplicates('index')
+            if not self.allow_duplicates: self.verify_no_duplicates('index')
 
 
 
