@@ -5,7 +5,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
-# pd.options.mode.chained_assignment = None
+pd.options.mode.chained_assignment = None
 
 
 
