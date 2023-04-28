@@ -471,7 +471,7 @@ class PandasCompare(object):
 
                 k2 = self.DataFrame.label_template.format(**dict(label='compare', name=k))
                 df[k2] = list(map(compare_values, df[left_k], df[right_k]))
-                df.dropna(subset=k2, inplace=True)
+                df.dropna(subset=[k2], inplace=True)
                 if not self.include_diff_type: df.drop(k2, axis=1, inplace=True)
 
                 if not df.empty:
