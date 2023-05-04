@@ -1,4 +1,5 @@
 from pathfinder import File
+from pathfinder.pathfinder import get_data_path, purge_whitespace
 from iterkit import natural_sort, to_iter
 
 from collections import OrderedDict
@@ -98,13 +99,6 @@ def drop_duplicates(df, **kwargs):
         return df.drop_duplicates(**kwargs)
 
 
-@inplace_wrapper
-def purge_whitespace(df):
-    ''' trim leading and trailing whitespace and replace whitespace-only values with NaN '''
-    for k in df.select_dtypes(include=['object']).columns:
-        df[k] = df[k].str.strip().replace(r'^\s*$', np.nan, regex=True)
-    return df
-
 
 def column_name_is_datelike(name):
     name = name.lower()
@@ -112,9 +106,19 @@ def column_name_is_datelike(name):
     return out
 
 
-def infer_data_types(df):
+def infer_data_types(obj):
     ''' the appropriate data types are inferred for all columns in the dataframe '''
-    df = purge_whitespace(columns_apply(df, 'strip'))
+
+    @purge_whitespace
+    def preprocess(obj):
+        if isinstance(obj, pd.DataFrame):
+            return obj.copy(deep=True)
+        elif isinstance(obj, pd.Series):
+            return obj.to_frame()
+        else:
+            raise TypeError(f"'obj' argument of type '{type(obj)}' is not supported.")
+
+    df = preprocess(obj)
 
     for k in df.columns:
         if column_name_is_datelike(k):
@@ -514,9 +518,10 @@ class PandasCompare(object):
         ''' export reports to excel '''
         if not self.reports: return
 
-        file = File(f"DataFrame Compare {self.left.label} vs {self.right.label}.xlsx")\
+        file = get_data_path().join(self.__class__.__name__, read_only=False)\
+               .join(f"Compare {self.left.label} vs {self.right.label}.xlsx")\
                .timestamp(fmt='%Y-%m-%d %I.%M %p', loc='suffix', encase=True)\
-                if self.file_name is None else File(self.file_name)
+               if self.file_name is None else File(self.file_name)
 
         for sheet, df in self.reports.items():
             file.write_df(sheet=sheet, df=df, **kwargs)
