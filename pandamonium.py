@@ -520,7 +520,7 @@ class PandasCompare(object):
 
         file = get_data_path().join(self.__class__.__name__, read_only=False)\
                .join(f"Compare {self.left.label} vs {self.right.label}.xlsx")\
-               .timestamp(fmt='%Y-%m-%d %I.%M %p', loc='suffix', encase=True)\
+               .timestamp(fmt='%Y-%m-%d %I.%M.%S %p', loc='suffix', encase=True)\
                if self.file_name is None else File(self.file_name)
 
         for sheet, df in self.reports.items():
