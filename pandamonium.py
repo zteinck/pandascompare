@@ -1,5 +1,5 @@
 from pathfinder import File
-from pathfinder.pathfinder import get_data_path, purge_whitespace
+from pathfinder import get_data_path, purge_whitespace
 from iterkit import natural_sort, to_iter
 
 from collections import OrderedDict
@@ -97,7 +97,6 @@ def drop_duplicates(df, **kwargs):
         return df.reset_index().drop_duplicates(**kwargs).set_index(index)
     else:
         return df.drop_duplicates(**kwargs)
-
 
 
 def column_name_is_datelike(name):
