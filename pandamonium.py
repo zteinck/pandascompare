@@ -1,5 +1,4 @@
-from pathfinder import File
-from pathfinder import get_data_path, purge_whitespace
+from pathfinder import File, get_data_path, purge_whitespace
 from iterkit import natural_sort, to_iter
 
 from collections import OrderedDict
