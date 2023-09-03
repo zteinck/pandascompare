@@ -1,6 +1,5 @@
 from pathfinder import File, get_data_path, purge_whitespace
 from iterkit import natural_sort, to_iter
-
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
@@ -167,6 +166,10 @@ class PandasCompare(object):
           documentation below.
     '''
 
+    #+---------------------------------------------------------------------------+
+    # Initialize Instance
+    #+---------------------------------------------------------------------------+
+
     def __init__(
         self,
         left,
@@ -290,7 +293,6 @@ class PandasCompare(object):
         self.compare()
 
 
-
     #+---------------------------------------------------------------------------+
     # Classes
     #+---------------------------------------------------------------------------+
@@ -354,7 +356,6 @@ class PandasCompare(object):
             if not self.allow_duplicates: self.verify_no_duplicates('index')
 
 
-
         #+---------------------------------------------------------------------------+
         # Instance Methods
         #+---------------------------------------------------------------------------+
@@ -380,7 +381,6 @@ class PandasCompare(object):
                    .rename(columns={k: self.apply_label(k) for k in self.df.columns})
 
 
-
         #+---------------------------------------------------------------------------+
         # Properties
         #+---------------------------------------------------------------------------+
@@ -389,7 +389,6 @@ class PandasCompare(object):
         def refs(self):
             ''' labeled self.df filtered for reference columns only '''
             return self.apply_labels(self.ref_cols)
-
 
 
     #+---------------------------------------------------------------------------+
@@ -525,10 +524,6 @@ class PandasCompare(object):
             file.write_df(sheet=sheet, df=df, **kwargs)
 
         file.save()
-
-
-
-
 
 
 
