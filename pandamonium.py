@@ -324,6 +324,10 @@ class PandasCompare(object):
             see 'left' and 'right' documentation above
         '''
 
+        #+---------------------------------------------------------------------------+
+        # Initialize Instance
+        #+---------------------------------------------------------------------------+
+
         def __init__(self, obj, label, ref_cols):
 
             # set instance attributes
@@ -357,6 +361,16 @@ class PandasCompare(object):
 
 
         #+---------------------------------------------------------------------------+
+        # Properties
+        #+---------------------------------------------------------------------------+
+
+        @property
+        def refs(self):
+            ''' labeled self.df filtered for reference columns only '''
+            return self.apply_labels(self.ref_cols)
+
+
+        #+---------------------------------------------------------------------------+
         # Instance Methods
         #+---------------------------------------------------------------------------+
 
@@ -380,16 +394,6 @@ class PandasCompare(object):
             ''' run apply_label on all names in self.df '''
             return self.df[names or self.df.columns]\
                    .rename(columns={k: self.apply_label(k) for k in self.df.columns})
-
-
-        #+---------------------------------------------------------------------------+
-        # Properties
-        #+---------------------------------------------------------------------------+
-
-        @property
-        def refs(self):
-            ''' labeled self.df filtered for reference columns only '''
-            return self.apply_labels(self.ref_cols)
 
 
     #+---------------------------------------------------------------------------+
@@ -445,24 +449,32 @@ class PandasCompare(object):
         if self.left.df.equals(self.right.df):
             if self.verbose: print(f'{equal_verbiage} - 1st pass')
             return
-
+        
         if self.verbose: print(f"Comparing DataFrames '{self.left.label}' vs '{self.right.label}'")
-
+        
+        summary = pd.DataFrame(
+            columns=['Differences','Matches','Total','Match Rate %'],
+            dtype='float'
+            )
+        summary.index.name = 'Comparison'
+        self.reports['Compare Summary'] = summary
+            
         dfs = (self.left, self.right)
         sheet_name = '{0} {1} not in {2}'
         if not self.matches_only:
-            for func in ('find_missing_cols','find_missing_rows'):
+            for axis in ('cols','rows'):
                 for i in range(2):
-                    df = getattr(self, func)(dfs[i].df, dfs[i - 1].df)
-                    k = sheet_name.format(dfs[i].label, func.split('_')[-1], dfs[i - 1].label)
+                    df = getattr(self, f'find_missing_{axis}')(dfs[i].df, dfs[i - 1].df)
+                    k = sheet_name.format(dfs[i].label, axis, dfs[i - 1].label)
                     if not df.empty:
                         if self.verbose: print(f'\t• {k}')
                         self.reports[k] = df
-
-
+                        summary.loc[k, ['Differences','Total']] = len(df), \
+                        len(dfs[i].df if axis == 'rows' else dfs[i].df.columns)
+                            
         master = self.left.apply_labels(self.shared_columns).join(
                  self.right.apply_labels(self.shared_columns), how='inner')
-
+        
         if not master.empty:
 
             for k in self.shared_columns:
@@ -488,10 +500,15 @@ class PandasCompare(object):
 
                     if self.verbose: print(f'\t• {k}')
                     self.reports[k] = df
+                    summary.loc[k, ['Differences','Total']] = len(df), len(master)
 
-        if not self.reports:
+        if summary.empty:
+            self.reports.clear()
             if self.verbose: print(f'{equal_verbiage} - 2nd pass')
-
+        else:
+            summary['Matches'] = summary['Total'] - summary['Differences']
+            summary['Match Rate %'] = summary['Matches'] / summary['Total']
+            
 
     def find_missing_cols(self, a, b):
         ''' find missing columns '''
@@ -542,20 +559,22 @@ if __name__ == '__main__':
         'Integers': [1010.0, 2020.0, 3030.0],
         'Floats': [1010.05, 2020.05, 3030.05],
         'Percentage': [0.1,   0.2,   0.33],
-        'Datetime': [f'2023-01-{str(x).zfill(2)} 00:01:04' for x in range(1,4)],
-        'Date': pd.to_datetime([f'2023-01-{str(x).zfill(2)} 01:01:01' for x in range(1,4)]),
-        }).tail(2)
+        'Datetime': [f'2023-01-{str(x).zfill(2)} 00:01:04' for x in range(1, 4)],
+        'Date': pd.to_datetime([f'2023-01-{str(x).zfill(2)} 01:01:01' for x in range(1, 4)]),
+        'LeftCol': [np.nan] * 3,
+        })
 
     right = pd.DataFrame({
-        'UniqueID': [1,2,3],
-        'first_name': ['alice','viola','johnathan'],
-        'strIntegers': ['900', '5000', '9000'],
-        'Integers': [5, 3000, 3000],
-        'Floats': [0.05, 2020.9, 3030.5],
-        'Percentage': [0.15,   0.12,   0.7],
-        'Datetime': [f'2024-01-{str(x).zfill(2)} 00:03:04' for x in range(1,4)],
-        'Date': pd.to_datetime([f'2024-01-{str(x).zfill(2)} 01:04:01' for x in range(1,4)]),
-        }).head(2)
+        'UniqueID': [1,2,3,4],
+        'first_name': ['alice','viola','johnathan','brad'],
+        'strIntegers': ['900', '5000', '9000', '600'],
+        'Integers': [5, 3000, 3000, 100],
+        'Floats': [0.05, 2020.9, 3030.5, 0.45],
+        'Percentage': [0.15, 0.12, 0.7, 0.1],
+        'Datetime': [f'2024-01-{str(x).zfill(2)} 00:03:04' for x in range(1, 5)],
+        'Date': pd.to_datetime([f'2024-01-{str(x).zfill(2)} 01:04:01' for x in range(1, 5)]),
+        'RightCol': [np.nan] * 4,
+        })
 
     # print(left.dtypes)
     # left = infer_data_types(left)
