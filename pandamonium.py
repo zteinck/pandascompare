@@ -362,13 +362,14 @@ class PandasCompare(object):
 
         def verify_no_duplicates(self, attr):
             ''' verify there are no duplicates for a given attribute (e.g. columns or index) '''
-            obj = getattr(self.df, attr)
-            dupes = obj[ obj.duplicated() ].tolist()
-            if dupes:
+            s = pd.Series(getattr(self.df, attr)).value_counts(dropna=False)\
+                .rename_axis(attr).rename('duplicates')
+            dupes = s[ s > 1 ][:10].to_frame()
+            if len(dupes) > 0:
                 raise ValueError(
-                    "duplicates detected in '{0}' dataframe {1}:{2}"\
-                    .format(self.label, attr, '\n\t• '.join([''] + [str(x) for x in dupes]))
+                    f"duplicates detected in '{self.label}' dataframe {attr}:\n\n{dupes}\n"
                     )
+ 
 
         def apply_label(self, name):
             ''' add label to column name '''
