@@ -266,6 +266,7 @@ class PandasCompare(object):
         self.ignore_whitespace = ignore_whitespace
         self.compare_strings_as_floats = compare_strings_as_floats
         self.include_diff_type = include_diff_type
+        self.allow_duplicates = allow_duplicates
         self.verbose = verbose
         self.shared_columns = natural_sort(
             self.left.df.columns.intersection(self.right.df.columns).difference(ignore).tolist())
@@ -348,6 +349,10 @@ class PandasCompare(object):
             # verify there are no duplicate columns which can cause issues
             self.verify_no_duplicates('columns')
 
+            # drop duplicate rows
+            self.df.drop_duplicates(inplace=True)
+
+            # infer data types
             if self.infer_dtypes: self.df = infer_data_types(self.df)
 
             # set index to the column(s) you intend to join on
@@ -480,6 +485,7 @@ class PandasCompare(object):
             for k in self.shared_columns:
 
                 df = master[[self.left.apply_label(k), self.right.apply_label(k)]]
+                if self.allow_duplicates: df = drop_duplicates(df)
                 left_k, right_k = df.columns.tolist()
                 master.drop(df.columns, axis=1, inplace=True)
 
@@ -491,7 +497,10 @@ class PandasCompare(object):
                 if not df.empty:
                     if self.refs is not None:
                         ref_cols = self.refs.columns.difference(df.columns).tolist()
-                        if ref_cols: df = self.refs[ref_cols].join(df, how='inner')
+                        if ref_cols:
+                            refs = self.refs[ref_cols]
+                            if self.allow_duplicates: refs = drop_duplicates(refs)
+                            df = refs.join(df, how='inner')
 
                     if self.include_delta:
                         k3 = self.DataFrame.label_template.format(**dict(label='delta', name=k))
