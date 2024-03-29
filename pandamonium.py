@@ -496,7 +496,7 @@ class PandasCompare(object):
 
                 if not df.empty:
                     if self.refs is not None:
-                        ref_cols = self.refs.columns.difference(df.columns).tolist()
+                        ref_cols = [x for x in self.refs.columns if x not in df.columns]
                         if ref_cols:
                             refs = self.refs[ref_cols]
                             if self.allow_duplicates: refs = drop_duplicates(refs)
