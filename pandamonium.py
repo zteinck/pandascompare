@@ -381,8 +381,7 @@ class PandasCompare(object):
 
         def verify_no_duplicates(self, attr):
             ''' verify there are no duplicates for a given attribute (e.g. columns or index) '''
-            s = pd.Series(getattr(self.df, attr)).value_counts(dropna=False)\
-                .rename_axis(attr).rename('duplicates')
+            s = getattr(self.df, attr).value_counts(dropna=False)
             dupes = s[ s > 1 ][:10].to_frame()
             if len(dupes) > 0:
                 raise ValueError(
