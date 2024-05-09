@@ -103,6 +103,19 @@ def column_name_is_datelike(name):
     return out
 
 
+def verify_no_duplicates(df, attr='columns', label=None):
+    ''' verify there are no duplicates for a given attribute (e.g. columns or index) '''
+    if isinstance(df, pd.Series) and attr == 'columns': return
+    obj = getattr(df, attr)
+    if not obj.has_duplicates: return
+    s = obj.value_counts(dropna=False)
+    dupes = s[ s > 1 ][:10].to_frame()
+    msg = ['Duplicates detected in']
+    if label is not None: msg.append(f"'{label}'")
+    msg.extend([df.__class__.__name__, f"{attr}:\n\n{dupes}\n"])
+    raise ValueError(' '.join(msg))
+
+
 def infer_data_types(obj):
     ''' the appropriate data types are inferred for all columns in the dataframe '''
 
@@ -347,7 +360,7 @@ class PandasCompare(object):
             if get_index_names(self.df): self.df.reset_index(inplace=True)
 
             # verify there are no duplicate columns which can cause issues
-            self.verify_no_duplicates('columns')
+            verify_no_duplicates(df=self.df, label=self.label, attr='columns')
 
             # drop duplicate rows
             self.df.drop_duplicates(inplace=True)
@@ -362,7 +375,8 @@ class PandasCompare(object):
                 self.join_on = self.df.index.names = ['index']
 
             # verify there are no duplicate index values which can cause issues
-            if not self.allow_duplicates: self.verify_no_duplicates('index')
+            if not self.allow_duplicates:
+                verify_no_duplicates(df=self.df, label=self.label, attr='index')
 
 
         #+---------------------------------------------------------------------------+
@@ -378,16 +392,6 @@ class PandasCompare(object):
         #+---------------------------------------------------------------------------+
         # Instance Methods
         #+---------------------------------------------------------------------------+
-
-        def verify_no_duplicates(self, attr):
-            ''' verify there are no duplicates for a given attribute (e.g. columns or index) '''
-            s = getattr(self.df, attr).value_counts(dropna=False)
-            dupes = s[ s > 1 ][:10].to_frame()
-            if len(dupes) > 0:
-                raise ValueError(
-                    f"duplicates detected in '{self.label}' dataframe {attr}:\n\n{dupes}\n"
-                    )
- 
 
         def apply_label(self, name):
             ''' add label to column name '''
@@ -558,7 +562,7 @@ class PandasCompare(object):
 
 if __name__ == '__main__':
 
-    # example:
+        # example:
 
     left = pd.DataFrame({
         'UniqueID': [1,9,3],
