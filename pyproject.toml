@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "pandascompare"
+version = "0.1.0"
+description = "Suite of pandas utilities including a DataFrame comparison report builder."
+authors = ["Zachary Einck <zacharyeinck@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/zteinck/pandascompare"
+homepage = "https://github.com/zteinck/pandascompare"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pathpilot = "^0.1.1"
+iterlab = "*"
+numpy = "*"
+pandas = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

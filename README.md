@@ -1,8 +1,8 @@
-# pandamonium
-`pandamonium` is a library that offers a suite of `pandas` utilities.
+# pandascompare
+`pandascompare` is a library that offers a suite of `pandas` utilities.
 
 ### Core Utilities
-The flagship feature of `pandamonium` is the `PandasCompare` class that compares any two `DataFrame` objects along the following dimensions:
+The flagship feature of `pandascompare` is the `PandasCompare` class that compares any two `DataFrame` objects along the following dimensions:
 - `Rows`: discrepancies with respect to the join key(s) specified via the `join_on` argument.
 - `Columns`: name differences or missing columns.
 - `Values`: data that differs in terms of value or type.
@@ -12,7 +12,7 @@ Please refer to the documentation within the code for more information.
 
 ### Imports
 ```python
-from pandamonium import PandasCompare
+from pandascompare import PandasCompare
 import pandas as pd
 import numpy as np
 ```

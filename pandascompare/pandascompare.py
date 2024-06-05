@@ -1,5 +1,5 @@
-from pathfinder import File, get_data_path, purge_whitespace
-from iterkit import natural_sort, to_iter
+from pathpilot import File, get_data_path, purge_whitespace
+from iterlab import natural_sort, to_iter
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
