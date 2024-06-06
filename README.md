@@ -1,11 +1,25 @@
 # pandascompare
-`pandascompare` is a library that offers a suite of `pandas` utilities.
 
-### Core Utilities
-The flagship feature of `pandascompare` is the `PandasCompare` class that compares any two `DataFrame` objects along the following dimensions:
-- `Rows`: discrepancies with respect to the join key(s) specified via the `join_on` argument.
-- `Columns`: name differences or missing columns.
-- `Values`: data that differs in terms of value or type.
+<div>
+
+[![Package version](https://img.shields.io/pypi/v/pandascompare?color=%2334D058&label=pypi)](https://pypi.org/project/pandascompare/)
+[![License](https://img.shields.io/github/license/zteinck/pandascompare)](https://github.com/zteinck/pandascompare/blob/master/LICENSE)
+
+</div>
+
+`pandascompare` is a Python package designed to compare `DataFrame` objects, enabling you to quickly identify the differences between two datasets. 
+
+## Installation
+```sh
+pip install pandascompare
+```
+
+## Main Features
+The `PandasCompare` class compares any two `DataFrame` objects along the following dimensions:
+- `Rows` ➔ discrepancies with respect to the join key(s) specified via the `join_on` argument.
+- `Columns` ➔ name differences or missing columns.
+- `Values` ➔ data that differs in terms of value or type.
+
 
 ## Example Usage
 Please refer to the documentation within the code for more information.
@@ -13,13 +27,14 @@ Please refer to the documentation within the code for more information.
 ### Imports
 ```python
 from pandascompare import PandasCompare
-import pandas as pd
-import numpy as np
 ```
 
 ### Create DataFrames
 First, let's create two sample `DataFrame` objects to compare.
 ```python
+import pandas as pd
+import numpy as np
+
 # February Data
 left_df = pd.DataFrame({
     'id': [1, 2, 3],
