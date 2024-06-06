@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandascompare"
-version = "0.1.0"
+version = "0.1.1"
 description = "Suite of pandas utilities including a DataFrame comparison report builder."
 authors = ["Zachary Einck <zacharyeinck@gmail.com>"]
 license = "MIT"
@@ -10,7 +10,7 @@ homepage = "https://github.com/zteinck/pandascompare"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-pathpilot = "^0.1.1"
+pathpilot = "*"
 iterlab = "*"
 numpy = "*"
 pandas = "*"
