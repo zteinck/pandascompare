@@ -1,148 +1,18 @@
-from pathpilot import File, get_data_path, purge_whitespace
-from iterlab import natural_sort, to_iter
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
+from pathpilot import File, get_data_path
+from iterlab import natural_sort, to_iter
 
-pd.options.mode.chained_assignment = None
-
-
-
-#+---------------------------------------------------------------------------+
-# Freestanding functions
-#+---------------------------------------------------------------------------+
-
-def get_index_names(df):
-    ''' returns list of pandas DataFrame index name(s) '''
-    return list(filter(None, list(df.index.names)))
-
-
-def ignore_nan(func):
-    ''' wrapper function that ignores np.nan arguments '''
-
-    def wrapper(arg, *args, **kwargs):
-        if pd.notnull(arg):
-            return func(arg, *args, **kwargs)
-        else:
-            return arg
-
-    return wrapper
-
-
-def inplace_wrapper(func):
-    ''' wrapper that adds inplace functionality to any function '''
-
-    def wrapper(df, *args, **kwargs):
-        inplace = kwargs.get('inplace', False)
-        if not inplace: df = df.copy(deep=True)
-        df = func(df, *args, **kwargs)
-        return df
-
-    return wrapper
-
-
-def columns_apply(df, func, inplace=False):
-    '''
-    Description
-    ------------
-    applies a uniform function to all column names in a dataframe
-
-    Parameters
-    ------------
-    df : pd.DataFrame
-        dataframe to adjust column names
-    func : func | str
-        function to apply to each column name. If string, it will be interpreted as an attribute function of the column datatype
-        (e.g. 'lower', 'upper', 'title', 'int', etc.
-
-    Returns
-    ------------
-    out : pd.DataFrame | None
-        renamed dataframe is returned if inplace=False otherwise None
-    '''
-    return df.rename(columns={k: func(k) if callable(func) else getattr(k, func)() for k in df.columns}, inplace=inplace)
-
-
-def merge_dfs(a, b, **kwargs):
-    ''' returns merged dataframe with index still intact '''
-    if 'how' not in kwargs: kwargs['how'] = 'left'
-    a_index, b_index = map(get_index_names, (a, b))
-    out = (a.reset_index() if a_index else a).merge(
-          (b.reset_index() if b_index else b), **kwargs)
-    return out.set_index(a_index) if a_index else out
-
-
-def merge_left_only(a, b, **kwargs):
-    ''' returns 'a' dataframe filtered for records that are not in 'b' dataframe '''
-    kwargs['indicator'] = True
-    df = merge_dfs(a, b, **kwargs)
-    df = df[ (df['_merge'] == 'left_only') ].drop('_merge', axis=1)
-    return df
-
-
-def join_left_only(a, b, **kwargs):
-    ''' returns 'a' dataframe filtered for records that are not in 'b' dataframe '''
-    index = get_index_names(a)
-    if not index: raise NotImplementedError
-    b.index.names = index
-    return merge_left_only(a, b, on=index, **kwargs)
-
-
-def drop_duplicates(df, **kwargs):
-    ''' returns unique dataframe; pandas' drop_duplicates method does not account for different indices only columns '''
-    index = get_index_names(df)
-    if index:
-        return df.reset_index().drop_duplicates(**kwargs).set_index(index)
-    else:
-        return df.drop_duplicates(**kwargs)
-
-
-def column_name_is_datelike(name):
-    name = name.lower()
-    out = any(x in name for x in ('date','time')) or name[-2:] == 'dt'
-    return out
-
-
-def verify_no_duplicates(df, attr='columns', label=None):
-    ''' verify there are no duplicates for a given attribute (e.g. columns or index) '''
-    if isinstance(df, pd.Series) and attr == 'columns': return
-    obj = getattr(df, attr)
-    if not obj.has_duplicates: return
-    s = obj.value_counts(dropna=False)
-    dupes = s[ s > 1 ][:10].to_frame()
-    msg = ['Duplicates detected in']
-    if label is not None: msg.append(f"'{label}'")
-    msg.extend([df.__class__.__name__, f"{attr}:\n\n{dupes}\n"])
-    raise ValueError(' '.join(msg))
-
-
-def infer_data_types(obj):
-    ''' the appropriate data types are inferred for all columns in the dataframe '''
-
-    @purge_whitespace
-    def preprocess(obj):
-        if isinstance(obj, pd.DataFrame):
-            return obj.copy(deep=True)
-        elif isinstance(obj, pd.Series):
-            return obj.to_frame()
-        else:
-            raise TypeError(f"'obj' argument of type '{type(obj)}' is not supported.")
-
-    df = preprocess(obj)
-
-    for k in df.columns:
-        if column_name_is_datelike(k):
-            try:
-                df[k] = pd.to_datetime(df[k])
-            except Exception as e:
-                print(k, '-->', e)
-        else:
-            try:
-                df[k] = pd.to_numeric(df[k])
-            except:
-                pass
-
-    return df
+from .utils import (
+    get_index_names,
+    verify_no_duplicates,
+    ignore_nan,
+    column_name_is_datelike,
+    drop_duplicates,
+    merge_left_only,
+    infer_data_types,
+    )
 
 
 
@@ -554,63 +424,3 @@ class PandasCompare(object):
             file.write_df(sheet=sheet, df=df, **kwargs)
 
         file.save()
-
-
-
-
-
-
-if __name__ == '__main__':
-
-        # example:
-
-    left = pd.DataFrame({
-        'UniqueID': [1,9,3],
-        'first_name': ['alice','mike','john'],
-        'strIntegers': ['1010.0', '2020.0', '3030.0'],
-        'Integers': [1010.0, 2020.0, 3030.0],
-        'Floats': [1010.05, 2020.05, 3030.05],
-        'Percentage': [0.1,   0.2,   0.33],
-        'Datetime': [f'2023-01-{str(x).zfill(2)} 00:01:04' for x in range(1, 4)],
-        'Date': pd.to_datetime([f'2023-01-{str(x).zfill(2)} 01:01:01' for x in range(1, 4)]),
-        'LeftCol': [np.nan] * 3,
-        })
-
-    right = pd.DataFrame({
-        'UniqueID': [1,2,3,4],
-        'first_name': ['alice','viola','johnathan','brad'],
-        'strIntegers': ['900', '5000', '9000', '600'],
-        'Integers': [5, 3000, 3000, 100],
-        'Floats': [0.05, 2020.9, 3030.5, 0.45],
-        'Percentage': [0.15, 0.12, 0.7, 0.1],
-        'Datetime': [f'2024-01-{str(x).zfill(2)} 00:03:04' for x in range(1, 5)],
-        'Date': pd.to_datetime([f'2024-01-{str(x).zfill(2)} 01:04:01' for x in range(1, 5)]),
-        'RightCol': [np.nan] * 4,
-        })
-
-    # print(left.dtypes)
-    # left = infer_data_types(left)
-    # print(left.dtypes)
-
-    pc = PandasCompare(
-        left=left,
-        right=right,
-        left_label='left',
-        right_label='right',
-        join_on=None,
-        left_ref=[],
-        right_ref=[],
-        ignore=[],
-        file_name=None,
-        tolerance=0,
-        matches_only=False,
-        include_delta=True,
-        infer_dtypes=False,
-        ignore_whitespace=False,
-        compare_strings_as_floats=False,
-        label_template='{label}.{name}',
-        include_diff_type=False,
-        verbose=True,
-        )
-
-    pc.export_to_excel()
