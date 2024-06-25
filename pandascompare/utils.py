@@ -3,10 +3,6 @@ from pathpilot import purge_whitespace
 
 
 
-#+---------------------------------------------------------------------------+
-# Freestanding functions
-#+---------------------------------------------------------------------------+
-
 def get_index_names(df):
     ''' returns list of pandas DataFrame index name(s) '''
     return list(filter(None, list(df.index.names)))

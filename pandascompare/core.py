@@ -14,11 +14,9 @@ from .utils import (
     infer_data_types,
     )
 
+pd.options.mode.chained_assignment = None
 
 
-#+---------------------------------------------------------------------------+
-# Classes
-#+---------------------------------------------------------------------------+
 
 class PandasCompare(object):
     '''
@@ -49,9 +47,9 @@ class PandasCompare(object):
           documentation below.
     '''
 
-    #+---------------------------------------------------------------------------+
-    # Initialize Instance
-    #+---------------------------------------------------------------------------+
+    #╭-------------------------------------------------------------------------╮
+    #| Initialize Instance                                                     |
+    #╰-------------------------------------------------------------------------╯
 
     def __init__(
         self,
@@ -177,9 +175,9 @@ class PandasCompare(object):
         self.compare()
 
 
-    #+---------------------------------------------------------------------------+
-    # Classes
-    #+---------------------------------------------------------------------------+
+    #╭-------------------------------------------------------------------------╮
+    #| Classes                                                                 |
+    #╰-------------------------------------------------------------------------╯
 
     class DataFrame(object):
         '''
@@ -208,9 +206,9 @@ class PandasCompare(object):
             see 'left' and 'right' documentation above
         '''
 
-        #+---------------------------------------------------------------------------+
-        # Initialize Instance
-        #+---------------------------------------------------------------------------+
+        #╭-----------------------------------╮
+        #| Initialize Instance               |
+        #╰-----------------------------------╯
 
         def __init__(self, obj, label, ref_cols):
 
@@ -249,9 +247,9 @@ class PandasCompare(object):
                 verify_no_duplicates(df=self.df, label=self.label, attr='index')
 
 
-        #+---------------------------------------------------------------------------+
-        # Properties
-        #+---------------------------------------------------------------------------+
+        #╭-----------------------------------╮
+        #| Properties                        |
+        #╰-----------------------------------╯
 
         @property
         def refs(self):
@@ -259,9 +257,9 @@ class PandasCompare(object):
             return self.apply_labels(self.ref_cols)
 
 
-        #+---------------------------------------------------------------------------+
-        # Instance Methods
-        #+---------------------------------------------------------------------------+
+        #╭-----------------------------------╮
+        #| Instance Methods                  |
+        #╰-----------------------------------╯
 
         def apply_label(self, name):
             ''' add label to column name '''
@@ -274,9 +272,9 @@ class PandasCompare(object):
                    .rename(columns={k: self.apply_label(k) for k in self.df.columns})
 
 
-    #+---------------------------------------------------------------------------+
-    # Instance Methods
-    #+---------------------------------------------------------------------------+
+    #╭-------------------------------------------------------------------------╮
+    #| Instance Methods                                                        |
+    #╰-------------------------------------------------------------------------╯
 
     def compare(self):
 
@@ -327,16 +325,16 @@ class PandasCompare(object):
         if self.left.df.equals(self.right.df):
             if self.verbose: print(f'{equal_verbiage} - 1st pass')
             return
-        
+
         if self.verbose: print(f"Comparing DataFrames '{self.left.label}' vs '{self.right.label}'")
-        
+
         summary = pd.DataFrame(
             columns=['Differences','Matches','Total','Match Rate %'],
             dtype='float'
             )
         summary.index.name = 'Comparison'
         self.reports['Compare Summary'] = summary
-            
+
         dfs = (self.left, self.right)
         sheet_name = '{0} {1} not in {2}'
         if not self.matches_only:
@@ -349,10 +347,10 @@ class PandasCompare(object):
                         self.reports[k] = df
                         summary.loc[k, ['Differences','Total']] = len(df), \
                         len(dfs[i].df if axis == 'rows' else dfs[i].df.columns)
-                            
+
         master = self.left.apply_labels(self.shared_columns).join(
                  self.right.apply_labels(self.shared_columns), how='inner')
-        
+
         if not master.empty:
 
             for k in self.shared_columns:
@@ -390,7 +388,7 @@ class PandasCompare(object):
         else:
             summary['Matches'] = summary['Total'] - summary['Differences']
             summary['Match Rate %'] = summary['Matches'] / summary['Total']
-            
+
 
     def find_missing_cols(self, a, b):
         ''' find missing columns '''
