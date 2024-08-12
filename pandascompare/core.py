@@ -36,6 +36,11 @@ class PandasCompare(object):
         Right dataframe to compare
     refs : pd.DatFrame
         dataframe comprised of reference columns
+    ref_def : set
+        set of default reference columns to be included on each tab
+    ref_map : dict
+        dictionary where keys are column names and values are sets of
+        reference column names to be included on those tabs specifically.
     shared_columns : list
         Columns shared between the left and right dataframes. Columns included
         in the 'ignore' parameter are excluded from this list.
@@ -71,6 +76,7 @@ class PandasCompare(object):
         label_template='{label}.{name}',
         include_diff_type=False,
         allow_duplicates=False,
+        include_data=False,
         verbose=False,
         ):
         '''
@@ -88,12 +94,16 @@ class PandasCompare(object):
             Name of column(s) on which to join left and right dataframes.
             Note that the index is reset on the 'left' and 'right' arguments
             so passing index name(s) is also supported.
-        left_ref : str | list
-            List of columns from the 'left' argument to include on each tab for
-            reference.
-        right_ref : str | list
+        left_ref : str | list | dict
+            List of columns from the 'left' argument to include for reference.
+            Column names represented as strings in the list are considered "default"
+            reference columns and are included on every tab. Dictionaries represent a
+            special case where the key denotes a specific tab, and the value is the list
+            of reference columns to be included on that tab, in addition to the default
+            reference columns.
+        right_ref : str | list | dict
             List of columns from the 'right' argument to include on each tab for
-            reference.
+            reference. See 'left_ref' documentation for more information.
         ignore : list
             List of columns that will be ignored during the comparison.
         file_name : str | FileBase
@@ -127,6 +137,8 @@ class PandasCompare(object):
             if True, the column denoting the difference type 'value'/'type' is included in the reports
         allow_duplicates : bool
             if True, duplicates in the index are allowed
+        include_data : bool
+            if True, the entire 'left' and 'right' dataframes are included in the report for reference.
         verbose : bool
             if True, information will be printed
         '''
@@ -139,6 +151,7 @@ class PandasCompare(object):
         # set instance atrributes
         self.left = self.DataFrame(left, left_label, left_ref)
         self.right = self.DataFrame(right, right_label, right_ref)
+
         self.ignore = to_iter(ignore)
         self.file_name = file_name
         self.tolerance = tolerance
@@ -148,30 +161,19 @@ class PandasCompare(object):
         self.compare_strings_as_floats = compare_strings_as_floats
         self.include_diff_type = include_diff_type
         self.allow_duplicates = allow_duplicates
+        self.include_data = include_data
         self.verbose = verbose
+
         self.shared_columns = natural_sort(
-            self.left.df.columns.intersection(self.right.df.columns).difference(ignore).tolist())
+            self.left.df.columns\
+            .intersection(self.right.df.columns)\
+            .difference(ignore).tolist()
+            )
 
-        # build dataframe comprised of reference columns
-        if self.left.ref_cols and self.right.ref_cols:
-            df = self.left.refs.join(self.right.refs, how='inner')
-            column_order = []
-            for k in self.left.ref_cols:
-                column_order.append(self.left.apply_label(k))
-                if k in self.right.ref_cols:
-                    column_order.append(self.right.apply_label(k))
-            for k in self.right.ref_cols:
-                if self.right.apply_label(k) not in column_order:
-                    column_order.append(self.right.apply_label(k))
-            df = df[column_order]
-        elif self.left.ref_cols and not self.right.ref_cols:
-            df = self.left.refs
-        elif self.right.ref_cols and not self.left.ref_cols:
-            df = self.right.refs
-        else:
-            df = None
+        self.refs = self._build_refs()
+        self.ref_map = self._build_ref_map()
+        self.ref_def = self.left.ref_def.union(self.right.ref_def)
 
-        self.refs = df
         self.compare()
 
 
@@ -214,7 +216,6 @@ class PandasCompare(object):
 
             # set instance attributes
             self.label = label
-            self.ref_cols = to_iter(ref_cols) if ref_cols else None
 
             # verify 'df' argument is of the correct type and then make a copy
             if isinstance(obj, pd.DataFrame):
@@ -246,6 +247,8 @@ class PandasCompare(object):
             if not self.allow_duplicates:
                 verify_no_duplicates(df=self.df, label=self.label, attr='index')
 
+            self.parse_ref_cols(ref_cols)
+
 
         #╭-----------------------------------╮
         #| Properties                        |
@@ -270,6 +273,44 @@ class PandasCompare(object):
             ''' run apply_label on all names in self.df '''
             return self.df[names or self.df.columns]\
                    .rename(columns={k: self.apply_label(k) for k in self.df.columns})
+
+
+        def parse_ref_cols(self, columns):
+            ''' derive ref_cols, ref_def, and ref_map instance attributes '''
+
+            ref_cols = set()
+            ref_def = set()
+            ref_map = {}
+
+            for x in to_iter(columns):
+                if isinstance(x, str):
+                    ref_cols.add(x)
+                    ref_def.add(x)
+
+                elif isinstance(x, dict):
+                    for k, v in x.items():
+                        if k not in ref_map:
+                            ref_map[k] = set()
+                        v = to_iter(v)
+                        ref_cols.update(v)
+                        ref_map[k].update(v)
+                else:
+                    raise TypeError(f"'ref_cols' element of type '{type(x)}' is not supported.")
+
+            apply_label = lambda x: set(map(self.apply_label, x))
+
+            for k in ref_map:
+                ref_map[k].update(ref_def)
+                ref_map[k] = apply_label(ref_map[k])
+
+            missing_cols = ref_cols - set(self.df.columns)
+
+            if missing_cols:
+                raise ValueError(f"'{self.label}' dataframe is missing passed reference columns: {missing_cols}")
+
+            self.ref_cols = list(ref_cols)
+            self.ref_def = apply_label(ref_def)
+            self.ref_map = ref_map
 
 
     #╭-------------------------------------------------------------------------╮
@@ -336,6 +377,11 @@ class PandasCompare(object):
         self.reports['Compare Summary'] = summary
 
         dfs = (self.left, self.right)
+
+        if self.include_data:
+            for obj in dfs:
+                self.reports[f'{obj.label} data'] = obj.df
+
         sheet_name = '{0} {1} not in {2}'
         if not self.matches_only:
             for axis in ('cols','rows'):
@@ -367,7 +413,12 @@ class PandasCompare(object):
 
                 if not df.empty:
                     if self.refs is not None:
-                        ref_cols = [x for x in self.refs.columns if x not in df.columns]
+                        ref_cols = [
+                            x for x in self.refs.columns
+                            if x in self.ref_map.get(k, self.ref_def)
+                            and x not in df.columns
+                            ]
+
                         if ref_cols:
                             refs = self.refs[ref_cols]
                             if self.allow_duplicates: refs = drop_duplicates(refs)
@@ -407,6 +458,47 @@ class PandasCompare(object):
             on=self.DataFrame.join_on
             )
         return df
+
+
+    def _build_refs(self):
+        ''' build dataframe comprised of reference columns '''
+        if self.left.ref_cols and self.right.ref_cols:
+            df = self.left.refs.join(self.right.refs, how='inner')
+            column_order = []
+
+            for k in self.left.ref_cols:
+                column_order.append(self.left.apply_label(k))
+                if k in self.right.ref_cols:
+                    column_order.append(self.right.apply_label(k))
+
+            for k in self.right.ref_cols:
+                if self.right.apply_label(k) not in column_order:
+                    column_order.append(self.right.apply_label(k))
+
+            df = df[column_order]
+
+        elif self.left.ref_cols and not self.right.ref_cols:
+            df = self.left.refs
+
+        elif self.right.ref_cols and not self.left.ref_cols:
+            df = self.right.refs
+
+        else:
+            df = None
+
+        return df
+
+
+    def _build_ref_map(self):
+        ''' combine left and right ref_map '''
+        if self.refs is None: return {}
+        out = self.left.ref_map.copy()
+        for k, v in self.right.ref_map.items():
+            if k in out:
+                out[k].update(v)
+            else:
+                out[k] = v
+        return out
 
 
     def export_to_excel(self, **kwargs):
