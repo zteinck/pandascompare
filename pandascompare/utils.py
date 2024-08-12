@@ -1,5 +1,6 @@
 import pandas as pd
 from pathpilot import purge_whitespace
+from iterlab import to_iter
 
 
 
@@ -58,8 +59,26 @@ def merge_dfs(a, b, **kwargs):
     ''' returns merged dataframe with index still intact '''
     if 'how' not in kwargs: kwargs['how'] = 'left'
     a_index, b_index = map(get_index_names, (a, b))
+
+    if 'suffixes' not in kwargs:
+        s = pd.Series(
+            a_index + a.columns.tolist() + \
+            b_index + b.columns.tolist()
+            ).value_counts()
+
+        if 'on' in kwargs and kwargs['on'] is not None:
+            s.drop(to_iter(kwargs['on']), inplace=True)
+
+        dupes = s[ s > 1 ]
+        if not dupes.empty:
+            raise ValueError(
+                "Duplicate column names detected and 'suffixes' keyword "
+                f"argument not passed:\n\n{dupes[:10].to_frame()}\n"
+                )
+
     out = (a.reset_index() if a_index else a).merge(
           (b.reset_index() if b_index else b), **kwargs)
+
     return out.set_index(a_index) if a_index else out
 
 
