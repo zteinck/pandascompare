@@ -4,10 +4,11 @@ import pandas as pd
 from pathpilot import File, get_data_path
 from iterlab import natural_sort, to_iter
 
+from .decorators import ignore_nan
+
 from .utils import (
     get_index_names,
     verify_no_duplicates,
-    ignore_nan,
     column_name_is_datelike,
     drop_duplicates,
     merge_left_only,
