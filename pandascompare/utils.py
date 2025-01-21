@@ -20,20 +20,24 @@ def columns_apply(df, func, inplace=False):
     df : pd.DataFrame
         dataframe to adjust column names
     func : func | str
-        function to apply to each column name. If string, it will be interpreted as an attribute function of the column datatype
-        (e.g. 'lower', 'upper', 'title', 'int', etc.
+        function to apply to each column name. If string, it will be interpreted
+        as an attribute function of the column datatype (e.g. 'lower', 'upper',
+        'title', 'int', etc.).
 
     Returns
     ------------
     out : pd.DataFrame | None
         renamed dataframe is returned if inplace=False otherwise None
     '''
-    return df.rename(columns={k: func(k) if callable(func) else getattr(k, func)() for k in df.columns}, inplace=inplace)
+    return df.rename(
+        columns={k: func(k) if callable(func) else getattr(k, func)() for k in df.columns},
+        inplace=inplace
+        )
 
 
 def merge_dfs(a, b, **kwargs):
     ''' returns merged dataframe with index still intact '''
-    if 'how' not in kwargs: kwargs['how'] = 'left'
+    kwargs.setdefault('how', 'left')
     a_index, b_index = map(get_index_names, (a, b))
 
     if 'suffixes' not in kwargs:
@@ -42,8 +46,9 @@ def merge_dfs(a, b, **kwargs):
             b_index + b.columns.tolist()
             ).value_counts()
 
-        if 'on' in kwargs and kwargs['on'] is not None:
-            s.drop(to_iter(kwargs['on']), inplace=True)
+        join_on = kwargs.get('on')
+        if join_on is not None:
+            s.drop(to_iter(join_on), inplace=True)
 
         dupes = s[ s > 1 ]
         if not dupes.empty:
@@ -68,14 +73,18 @@ def merge_left_only(a, b, **kwargs):
 
 def join_left_only(a, b, **kwargs):
     ''' returns 'a' dataframe filtered for records that are not in 'b' dataframe '''
-    index = get_index_names(a)
-    if not index: raise NotImplementedError
-    b.index.names = index
-    return merge_left_only(a, b, on=index, **kwargs)
+    a_index, b_index = map(get_index_names, (a, b))
+    if not all([a_index, b_index]) or a_index != b_index:
+        raise NotImplementedError(
+            "DataFrame arguments must have the same named index: "
+            f"'a' index = {a_index}; 'b' index = {b_index}"
+            )
+    return merge_left_only(a, b, on=a_index, **kwargs)
 
 
 def drop_duplicates(df, **kwargs):
-    ''' returns unique dataframe; pandas' drop_duplicates method does not account for different indices only columns '''
+    ''' returns unique dataframe; pandas' drop_duplicates method does not account
+        for different indices only columns '''
     index = get_index_names(df)
     if index:
         return df.reset_index().drop_duplicates(**kwargs).set_index(index)
