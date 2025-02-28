@@ -7,7 +7,7 @@
 
 </div>
 
-`pandascompare` is a Python package designed to compare `DataFrame` objects, enabling you to quickly identify the differences between two datasets. 
+`pandascompare` is a Python package designed to compare `DataFrame` objects, enabling you to quickly identify the differences between two datasets.
 
 ## Installation
 ```sh
@@ -71,5 +71,5 @@ pc = PandasCompare(
 ### Export to Excel
 Finally, let's export the compare report to an Excel file to view the results.
 ```python
-pc.export_to_excel()
+pc.to_excel()
 ```

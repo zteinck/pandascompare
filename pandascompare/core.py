@@ -158,8 +158,8 @@ class PandasCompare(object):
 
         if file_name is not None:
             warnings.warn(
-                "'file_name' argument is deprecated and will be removed in a future release. "
-                "Please use the 'file' argument in export_to_excel() instead.",
+                "The 'file_name' argument is deprecated and will be removed in a future release. "
+                "Use the 'file' argument in 'to_excel()' instead.",
                 DeprecationWarning,
                 stacklevel=2
                 )
@@ -553,7 +553,7 @@ class PandasCompare(object):
         return out
 
 
-    def export_to_excel(self, file=None, empty_ok=False, **kwargs):
+    def to_excel(self, file=None, empty_ok=False, **kwargs):
         '''
         Description
         ------------
@@ -585,7 +585,8 @@ class PandasCompare(object):
                 print(f'Skipping export to Excel - {empty_msg.lower()}.')
             return
 
-        if file is None: file = self.file_name
+        if file is None:
+            file = self.file_name
 
         if file is None:
             file_name = f"Compare {self.left.label} vs {self.right.label}.xlsx"
@@ -606,3 +607,13 @@ class PandasCompare(object):
         else:
             file.name += ' (empty)'
             file.save({'Compare Summary': pd.DataFrame({'Note': [empty_msg + '.']})})
+
+
+    def export_to_excel(self, *args, **kwargs):
+        warnings.warn(
+            "The 'export_to_excel()' method is deprecated and will be removed in a future release. "
+            "Use 'to_excel()' instead.",
+            DeprecationWarning,
+            stacklevel=2
+            )
+        self.to_excel(*args, **kwargs)
