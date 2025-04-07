@@ -19,15 +19,19 @@ pd.options.mode.chained_assignment = None
 
 
 
+
 class PandasCompare(object):
     '''
     Description
     --------------------
-    Compares two pandas DataFrame or Series objects across the following dimensions:
-        • Rows ➔ Identifies discrepancies based on the join key(s) specified using
-                  the 'join_on' argument.
-        • Columns ➔ Detects differences in column names and identifies missing columns.
-        • Values ➔ Highlights differences in data, including mismatches in value or type.
+    Compares two pandas DataFrame or Series objects across the following
+    dimensions:
+        • Rows ➔ Identifies discrepancies based on the join key(s) specified
+                  using the 'join_on' argument.
+        • Columns ➔ Detects differences in column names and identifies missing
+                     columns.
+        • Values ➔ Highlights differences in data, including mismatches in
+                    value or type.
 
     Class Attributes
     --------------------
@@ -158,8 +162,8 @@ class PandasCompare(object):
 
         if file_name is not None:
             warnings.warn(
-                "The 'file_name' argument is deprecated and will be removed in a future release. "
-                "Use the 'file' argument in 'to_excel()' instead.",
+                "The 'file_name' argument is deprecated and will be removed in a "
+                "future release. Use the 'file' argument in 'to_excel()' instead.",
                 DeprecationWarning,
                 stacklevel=2
                 )
@@ -611,8 +615,8 @@ class PandasCompare(object):
 
     def export_to_excel(self, *args, **kwargs):
         warnings.warn(
-            "The 'export_to_excel()' method is deprecated and will be removed in a future release. "
-            "Use 'to_excel()' instead.",
+            "The 'export_to_excel()' method is deprecated and will be removed "
+            "in a future release. Use 'to_excel()' instead.",
             DeprecationWarning,
             stacklevel=2
             )
