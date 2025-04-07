@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from pathpilot import purge_whitespace
 from iterlab import to_iter
 
@@ -29,10 +30,11 @@ def columns_apply(df, func, inplace=False):
     out : pd.DataFrame | None
         renamed dataframe is returned if inplace=False otherwise None
     '''
-    return df.rename(
-        columns={k: func(k) if callable(func) else getattr(k, func)() for k in df.columns},
-        inplace=inplace
-        )
+    renames = {
+        k: func(k) if callable(func) else getattr(k, func)()
+        for k in df.columns
+        }
+    return df.rename(columns=renames, inplace=inplace)
 
 
 def merge_dfs(a, b, **kwargs):
@@ -138,3 +140,141 @@ def infer_data_types(obj):
                 pass
 
     return df
+
+
+def coerce_series(arg):
+    '''
+    Description
+    ------------
+    converts one-dimensional argument to pandas Series
+
+    Parameters
+    ------------
+    arg : pd.DataFrame | pd.Series | list | tuple | np.ndarray
+        One-dimensional data to be converted to a Series.
+        If arg is already a Series, a copy is returned.
+
+    Returns
+    ------------
+    s : pd.Series
+        arg represented as a Series
+    '''
+    if isinstance(arg, pd.DataFrame):
+        columns = arg.columns.tolist()
+        if len(columns) != 1:
+            raise ValueError(
+                "cannot convert DataFrame with more than "
+                f"one column to a Series: {columns}"
+                )
+        return arg[columns[0]]
+
+    if isinstance(arg, pd.Series):
+        s = arg.copy(deep=True)
+        if s.name is None:
+            s.name = 'untitled_0'
+        return s
+
+    elif isinstance(arg, (list, tuple, np.ndarray)):
+        ndim = np.ndim(arg)
+        if ndim == 1: # one-dimensional
+            return pd.Series(arg, name='untitled_0')
+        else:
+            raise ValueError(f"'arg' ndim should be 1 not {ndim}.")
+
+    else:
+        raise TypeError(f"'arg' type '{type(arg)}' not supported.")
+
+
+def coerce_dataframe(arg, return_ndim=False):
+    '''
+    Description
+    ------------
+    converts argument to pandas DataFrame
+
+    Parameters
+    ------------
+    arg : pd.DataFrame | pd.Series | list | tuple | np.ndarray | *
+        data to be converted to a DataFrame.
+        If arg is already a DataFrame, a copy is returned.
+    return_ndim : bool
+        if True, arg's number of dimensions is returned
+                 as well.
+
+    Returns
+    ------------
+    df : pd.DataFrame
+        arg represented as a DataFrame
+    ndim : int
+        only returned if return_ndim is True
+    '''
+    if isinstance(arg, pd.DataFrame):
+        df, ndim = arg.copy(deep=True), 2
+
+    elif isinstance(arg, pd.Series):
+        df, ndim = arg.to_frame(), 1
+
+    else:
+        ndim = np.ndim(arg)
+        if ndim == 0: # single value
+            arg = [arg]
+        if ndim <= 1: # one-dimensional
+            df = coerce_series(arg).rename('untitled_0').to_frame()
+        elif ndim == 2: # two-dimensional
+            columns = [f'untitled_{x}' for x in range(len(arg[0]))]
+            df = pd.DataFrame(arg, columns=columns)
+        else:
+            raise ValueError(f"'arg' ndim should be 0 ≤ ndim ≤ 2, not: {ndim}.")
+
+    return (df, ndim) if return_ndim else df
+
+
+def dropna_edges(s, drop_inf=False, ignore_gaps=False):
+    '''
+    Description
+    ------------
+    Drops leading and trailing NaN values in a Series.
+    Only Series with indexes sorted in ascending order
+    are supported.
+
+    Parameters
+    ------------
+    drop_inf : bool
+        if True, infinite values replaced with NaN
+    ignore_gaps : bool
+        if True, NaN values exist between valid values
+                 are permitted.
+        if False, if any NaN values exist between valid
+                  values, an exception is raised.
+
+    Returns
+    ------------
+    out : pd.Series
+       Series with leading and trailing NaN values dropped.
+    '''
+    s = coerce_series(s)
+
+    if not s.index.is_monotonic_increasing:
+        raise NotImplementedError(
+            "'s' index must be sorted in ascending order"
+            )
+
+    if drop_inf:
+        s.replace(
+            to_replace=[np.inf, -np.inf],
+            value=np.nan,
+            inplace=True
+            )
+
+    first_index = s.first_valid_index()
+    last_index = s.last_valid_index()
+
+    out = s.loc[ first_index : last_index ]
+
+    if ignore_gaps or out.notnull().all():
+        return out
+
+    msg = ["'s' argument cannot contain NaN"]
+    if drop_inf: msg.append('or Inf(+/-)')
+    z = s.loc[ out[ out.isnull() ].index ]
+    msg.append(f"between valid values: \n\n{z}\n")
+    raise ValueError(' '.join(msg))
