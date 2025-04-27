@@ -1,23 +1,24 @@
 import warnings
-import numpy as np
 import pandas as pd
+import numpy as np
 from pathpilot import File, get_data_path
 from iterlab import natural_sort, to_iter
 
+from .combine import join_left_only
 from .decorators import ignore_nan
+
+from .dupes import (
+    verify_no_duplicates,
+    drop_duplicates,
+    )
 
 from .utils import (
     get_index_names,
-    verify_no_duplicates,
-    column_name_is_datelike,
-    drop_duplicates,
-    join_left_only,
     infer_data_types,
+    column_name_is_datelike,
     )
 
 pd.options.mode.chained_assignment = None
-
-
 
 
 class PandasCompare(object):
