@@ -1,22 +1,8 @@
 import warnings
 import pandas as pd
 import numpy as np
-from pathpilot import File, get_data_path
-from iterlab import natural_sort, to_iter
-
-from .combine import join_left_only
-from .decorators import ignore_nan
-
-from .dupes import (
-    verify_no_duplicates,
-    drop_duplicates,
-    )
-
-from .utils import (
-    get_index_names,
-    infer_data_types,
-    column_name_is_datelike,
-    )
+import pathpilot as pp
+import oddments as odd
 
 pd.options.mode.chained_assignment = None
 
@@ -186,7 +172,9 @@ class PandasCompare(object):
         self.include_data = include_data
         self.verbose = verbose
 
-        self.ignored_columns = set() if ignore is None else set(to_iter(ignore))
+        self.ignored_columns = set() if ignore is None else \
+                               set(odd.to_iter(ignore))
+
         self.shared_columns = self._find_shared_cols()
 
         self.ref_df = self._combine_ref_dfs()
@@ -254,7 +242,7 @@ class PandasCompare(object):
                                 f"or Series, not {type(data).__name__}.")
 
             # if there is already an index then reset it to column(s)
-            index_names = get_index_names(self.df)
+            index_names = odd.get_index_names(self.df)
             default_index_name = ['index']
 
             for name in (index_names or default_index_name):
@@ -269,14 +257,14 @@ class PandasCompare(object):
                 self.df.index.names = default_index_name
 
             # verify there are no duplicate columns which can cause issues
-            verify_no_duplicates(df=self.df, label=self.label, attr='columns')
+            odd.verify_no_duplicates(df=self.df, label=self.label, attr='columns')
 
             # drop duplicate rows
             self.df.drop_duplicates(inplace=True)
 
             # infer data types
             if self.parent.infer_dtypes:
-                self.df = infer_data_types(self.df)
+                self.df = odd.infer_data_types(self.df)
 
             # set index to the column(s) you intend to join on
             if self.parent.join_on is not None:
@@ -284,7 +272,7 @@ class PandasCompare(object):
 
             # verify there are no duplicate index values which can cause issues
             if not self.parent.allow_duplicates:
-                verify_no_duplicates(df=self.df, label=self.label, attr='index')
+                odd.verify_no_duplicates(df=self.df, label=self.label, attr='index')
 
             # decompose ref_cols argument
             self.ref_cols, self.ref_def, self.ref_map = self.parse_ref_cols(ref_cols)
@@ -313,7 +301,7 @@ class PandasCompare(object):
 
         def parse_ref_cols(self, ref_cols):
             ''' derive ref_cols, ref_def, and ref_map instance attributes '''
-            ref_cols = [] if ref_cols is None else to_iter(ref_cols)
+            ref_cols = [] if ref_cols is None else odd.to_iter(ref_cols)
             arg_name = f"'{self.side}_ref'"
             ref_all, ref_map = [], {}
 
@@ -323,7 +311,7 @@ class PandasCompare(object):
 
                 elif isinstance(x, dict):
                     for k in x:
-                        v = to_iter(x[k])
+                        v = odd.to_iter(x[k])
                         invalid_types = list(set([type(e).__name__ for e in v
                                                   if not isinstance(e, str)]))
                         if invalid_types:
@@ -378,7 +366,7 @@ class PandasCompare(object):
 
         def compare_values(left, right):
 
-            @ignore_nan
+            @odd.ignore_nan
             def ignore_whitespace(x):
                 if not isinstance(x, str): return x
                 out = x.strip()
@@ -408,7 +396,7 @@ class PandasCompare(object):
             try:
                 return left - right
             except:
-                if column_name_is_datelike(name):
+                if odd.column_name_is_datelike(name):
                     try:
                         return pd.to_datetime(left) - pd.to_datetime(right)
                     except:
@@ -460,7 +448,7 @@ class PandasCompare(object):
             for k in self.shared_columns:
 
                 df = master[[self.left.add_label(k), self.right.add_label(k)]]
-                if self.allow_duplicates: df = drop_duplicates(df)
+                if self.allow_duplicates: df = odd.drop_duplicates(df)
                 left_k, right_k = df.columns.tolist()
                 master.drop(df.columns, axis=1, inplace=True)
 
@@ -479,7 +467,7 @@ class PandasCompare(object):
 
                         if ref_cols:
                             refs = self.ref_df[ref_cols]
-                            if self.allow_duplicates: refs = drop_duplicates(refs)
+                            if self.allow_duplicates: refs = odd.drop_duplicates(refs)
                             df = refs.join(df, how='inner')
 
                     if self.include_delta:
@@ -513,7 +501,7 @@ class PandasCompare(object):
 
     def _find_missing_rows(self, a, b):
         ''' find missing rows '''
-        return join_left_only(a, b.drop(b.columns, axis=1))
+        return odd.join_left_only(a, b.drop(b.columns, axis=1))
 
 
     def _find_shared_cols(self):
@@ -522,7 +510,7 @@ class PandasCompare(object):
             .intersection(self.right.df.columns)\
             .difference(self.ignored_columns)\
             .tolist()
-        return natural_sort(out)
+        return odd.natural_sort(out)
 
 
     def _combine_ref_dfs(self):
@@ -595,14 +583,14 @@ class PandasCompare(object):
 
         if file is None:
             file_name = f"Compare {self.left.label} vs {self.right.label}.xlsx"
-            folder = get_data_path().join(self.__class__.__name__, read_only=False)
+            folder = pp.get_data_path().join(self.__class__.__name__, read_only=False)
             file = folder.join(file_name).timestamp(
                 fmt='%Y-%m-%d %I.%M.%S %p',
                 loc='suffix',
                 encase=True
                 )
         else:
-            file = File(file)
+            file = pp.File(file)
             if file.ext != 'xlsx':
                 raise ValueError(f"file extension must be 'xlsx', not: '{file.ext}'")
 
