@@ -16,9 +16,9 @@ pip install pandascompare
 
 ## Main Features
 The `PandasCompare` class compares any two `DataFrame` objects along the following dimensions:
-- `Rows` ➔ discrepancies with respect to the join key(s) specified via the `join_on` argument.
+- `Rows` ➔ missing rows based on the join key(s) specified via the `join_on` argument.
 - `Columns` ➔ name differences or missing columns.
-- `Values` ➔ data that differs in terms of value or type.
+- `Values` ➔ value mismatches in content or type.
 
 
 ## Example Usage
@@ -57,8 +57,8 @@ right_df = pd.DataFrame({
 Next, we will initialize a `PandasCompare` instance to perform the comparison. Please consult the in-code documentation for a comprehensive list of available arguments.
 ```python
 pc = PandasCompare(
-    left=left_df,
-    right=right_df,
+    left_data=left_df,
+    right_data=right_df,
     left_label='feb',
     right_label='jan',
     join_on='id',
