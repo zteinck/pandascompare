@@ -1,8 +1,9 @@
-import warnings
+from pathpilot import file_factory
+import oddments as odd
 import pandas as pd
 import numpy as np
-import pathpilot as pp
-import oddments as odd
+
+from ._data_wrapper import DataWrapper
 
 pd.options.mode.chained_assignment = None
 
@@ -13,23 +14,21 @@ class PandasCompare(object):
     --------------------
     Compares two pandas DataFrame or Series objects across the following
     dimensions:
-        • Rows ➔ Identifies discrepancies based on the join key(s) specified
-                  using the 'join_on' argument.
-        • Columns ➔ Detects differences in column names and identifies missing
-                     columns.
-        • Values ➔ Highlights differences in data, including mismatches in
-                    value or type.
+        • Rows ➔ missing rows based on the join key(s).
+        • Columns ➔ name differences or missing columns.
+        • Values ➔ value mismatches in content or type.
 
     Class Attributes
     --------------------
-    ...
+    summary_name : str
+        Name of compare summary tab.
 
     Instance Attributes
     --------------------
     left : DataWrapper
-        Left dataset to compare
+        Left dataset to compare.
     right : DataWrapper
-        Right dataset to compare
+        Right dataset to compare.
     ref_df : pd.DataFrame
         DataFrame comprised of all extra columns the user wants to include
         in the comparison reports for reference.
@@ -42,9 +41,11 @@ class PandasCompare(object):
         List of column names shared between the left and right DataFrames.
         Column names included in the 'ignore' parameter are excluded from
         this list.
-    ignored_columns : set
-        See 'ignore' parameter documentation.
-    reports : dict | None
+    ignore_columns : set
+        See 'ignore_columns' parameter documentation.
+    summary : pd.DataFrame
+        DataFrame containing comparison summary statistics.
+    _reports : dict
         Dictionary where the keys are report names, and the values are
         pd.DataFrame objects representing the corresponding reports.
 
@@ -53,43 +54,60 @@ class PandasCompare(object):
     '''
 
     #╭-------------------------------------------------------------------------╮
+    #| Class Attributes                                                        |
+    #╰-------------------------------------------------------------------------╯
+
+    summary_name = 'Compare Summary'
+
+
+    #╭-------------------------------------------------------------------------╮
     #| Initialize Instance                                                     |
     #╰-------------------------------------------------------------------------╯
 
     def __init__(
         self,
-        left,
-        right,
+        left_data,
+        right_data,
         left_label='left',
         right_label='right',
+        delta_label='delta',
+        label_template='{label}.{name}',
         join_on=None,
         left_ref=None,
         right_ref=None,
-        ignore=None,
-        file_name=None,
-        tolerance=0,
-        matches_only=False,
+        dimensions=None,
+        ignore_columns=None,
+        include_data=False,
+        include_diff_type=False,
         include_delta=False,
+        tolerance=0,
         infer_dtypes=False,
         ignore_whitespace=False,
-        compare_strings_as_floats=False,
-        label_template='{label}.{name}',
-        include_diff_type=False,
+        try_numeric=False,
         allow_duplicates=False,
-        include_data=False,
         verbose=False,
         ):
         '''
         Parameters
         ------------
-        left : pd.DataFrame | pd.Series
-            "left" side dataset to compare
-        right : pd.DataFrame | pd.Series
-            "right" side dataset to compare
+        left_data : any
+            "left" side dataset to compare.
+        right_data : any
+            "right" side dataset to compare.
         left_label : str
-            Suffix used to denote columns from left DataFrame (e.g. '_a')
+            Label used to denote columns from the left DataFrame
+            (e.g. 'after').
         right_label : str
-            Suffix used to denote columns from right DataFrame (e.g. '_b')
+            Label used to denote columns from the right DataFrame
+            (e.g. 'before').
+        delta_label : str
+            If include_delta is True, this label is used to denote
+            delta columns (e.g. 'Δ').
+        label_template : str
+            String template that should contain placeholders for 'label' and
+            'name' (e.g. '{label}.{name}', '{name}_{label}', etc.) where the
+            label will be populated with 'left_label' or 'right_label' as
+            appropriate and the name corresponds with the column name.
         join_on : str | list
             Name of column(s) on which to join left and right DataFrames.
             Note that the index is reset on the 'left' and 'right' arguments
@@ -97,83 +115,86 @@ class PandasCompare(object):
         left_ref : str | list | dict
             List of columns from the 'left' argument to include for reference.
             Column names represented as strings in the list are considered
-            "default" reference columns and are included on every tab. Dictionaries
-            represent a special case where the key denotes a specific tab, and the
-            value is the list of reference columns to be included on that tab, in
-            addition to the default reference columns.
+            "default" reference columns and are included on every tab.
+            Dictionaries represent a special case where the key denotes a
+            specific tab, and the value is the list of reference columns to be
+            included on that tab, in addition to the default reference columns.
         right_ref : str | list | dict
-            List of columns from the 'right' argument to include on each tab for
-            reference. See 'left_ref' documentation for more information.
-        ignore : list
-            List of column names that will be ignored during the comparison.
-        tolerance : float
-            Acceptable margin of error between two numeric values. Deltas in excess
-            of this error tolerance threshold are categorized as differences. For
-            example, if tolerance=0.01 then 1.01 vs 1.02 (0.01) would not count as
-            a difference whereas 1.01 vs 1.03 would (0.02).
-        matches_only : bool
-            If True, the report will only reflect differences between matching records.
-            The report will not take into consideration row or column differences.
-        include_delta : bool
-            If True, a "delta" column is added to each report showing the difference
-            observed between numeric or date-like values.
-        infer_dtypes : bool
-            If True, the appropriate data types are inferred for all columns in the
-            'left' and 'right' DataFrames.
-        ignore_whitespace : bool
-            If True, values with leading and trailing whitespace are stripped and
-            values comprised of only whitespace are treated as np.nan for comparison
-            purposes.
-        compare_strings_as_floats : bool
-            if True, strings are compared as floats if possible. If True, '0.25' and
-            '0.250' would not count as left value difference, for example. Conversely,
-            you would want to set it to False when comparing values that are not meant
-            to be interpreted as strings (e.g. leading zeroes such as '0505' vs '505').
-        label_template : str
-            string template that should contain placeholders for 'label' and 'name'
-            (e.g. '{label}.{name}', '{name}_{label}', etc.) where the label will be
-            populated with 'left_label' or 'right_label' as appropriate and the name
-            corresponds with the column name.
-        include_diff_type : bool
-            if True, the column denoting the difference type 'value'/'type' is
-            included in the reports.
-        allow_duplicates : bool
-            if True, duplicates in the join key(s) are allowed (see 'join_on' arg).
+            List of columns from the 'right' argument to include on each tab
+            for reference. See 'left_ref' documentation for more information.
+        dimensions : set
+            Specifies the dimensions along which the data will be compared.
+            Valid options include 'rows', 'columns', and 'values'.
+            If None, all dimensions are compared by default.
+        ignore_columns : list
+            List of column names to ignore during the comparison.
         include_data : bool
-            if True, the entire 'left' and 'right' DataFrames being compared are
-            included in the report for reference.
+            if True, the entire 'left' and 'right' DataFrames being compared
+            are included in the report for reference.
+        include_diff_type : bool
+            if True, the column denoting the difference type 'value'/'type'
+            is included in the reports.
+        include_delta : bool
+            If True, a "delta" column is added to each report showing the
+            difference observed between numeric or date-like values.
+        tolerance : float
+            Acceptable margin of error between two numeric values. Deltas in
+            excess of this error tolerance threshold are categorized as
+            differences. For example, if tolerance=0.01 then 1.01 vs 1.02
+            (0.01) would not count as a difference whereas 1.01 vs 1.03 would
+            (0.02).
+        infer_dtypes : bool
+            If True, the appropriate data types are inferred for all columns
+            in the 'left' and 'right' DataFrames.
+        ignore_whitespace : bool
+            If True, values with leading and trailing whitespace are stripped
+            and values comprised of only whitespace are treated as np.nan for
+            comparison purposes.
+        try_numeric : bool
+            if True, values are compared as floats if possible. For example,
+            '0.25' and '0.250' would not count as a value difference.
+        allow_duplicates : bool
+            if True, duplicates in the join key(s) are allowed.
         verbose : bool
-            if True, information will be printed.
+            if True, relevant information is printed during the compare.
         '''
-        self.file_name = file_name
-
-        if file_name is not None:
-            warnings.warn(
-                "The 'file_name' argument is deprecated and will be removed in a "
-                "future release. Use the 'file' argument in 'to_excel()' instead.",
-                DeprecationWarning,
-                stacklevel=2
-                )
 
         self.join_on = join_on
         self.infer_dtypes = infer_dtypes
         self.label_template = label_template
         self.allow_duplicates = allow_duplicates
 
-        self.left = self.DataWrapper(self, 'left', left, left_label, left_ref)
-        self.right = self.DataWrapper(self, 'right', right, right_label, right_ref)
+        self.left = DataWrapper(
+            parent=self,
+            side='left',
+            data=left_data,
+            label=left_label,
+            ref_cols=left_ref,
+            )
 
+        self.right = DataWrapper(
+            parent=self,
+            side='right',
+            data=right_data,
+            label=right_label,
+            ref_cols=right_ref,
+            )
+
+        self.delta_label = delta_label
         self.tolerance = tolerance
-        self.matches_only = matches_only
+        self.dimensions = self._resolve_dims(dimensions)
         self.include_delta = include_delta
         self.ignore_whitespace = ignore_whitespace
-        self.compare_strings_as_floats = compare_strings_as_floats
+        self.try_numeric = try_numeric
         self.include_diff_type = include_diff_type
         self.include_data = include_data
         self.verbose = verbose
 
-        self.ignored_columns = set() if ignore is None else \
-                               set(odd.to_iter(ignore))
+        self.ignore_columns = set()
+        if ignore_columns is not None:
+            self.ignore_columns.update(
+                odd.to_iter(ignore_columns)
+                )
 
         self.shared_columns = self._find_shared_cols()
 
@@ -181,334 +202,154 @@ class PandasCompare(object):
         self.ref_map = self._combine_ref_maps()
         self.ref_def = self.left.ref_def.union(self.right.ref_def)
 
-        self.reports = self._compile_reports()
+        self.summary = self._get_summary_frame()
+        self._reports = {}
+        self._compile_reports()
 
 
     #╭-------------------------------------------------------------------------╮
-    #| Classes                                                                 |
+    #| Properties                                                              |
     #╰-------------------------------------------------------------------------╯
 
-    class DataWrapper(object):
-        '''
-        Description
-        --------------------
-        Wraps left and right DataFrames.
-
-        Class Attributes
-        --------------------
-        ...
-
-        Instance Attributes
-        --------------------
-        parent : PandasCompare
-            object to which the data belongs
-        side : str
-            indicates which "side" the data belongs to (e.g. 'left' or 'right')
-        label : str
-            label for column names
-        df : pd.DataFrame
-            dataset to compare
-        ref_cols : list
-            ordered list of all reference column names
-        ref_def : set
-            see parent class documentation
-        ref_map : dict
-            see parent class documentation
-        ref_df : pd.DataFrame
-            subset of self.df that only includes labeled reference columns
-        '''
-
-        #╭-----------------------------------╮
-        #| Initialize Instance               |
-        #╰-----------------------------------╯
-
-        def __init__(self, parent, side, data, label, ref_cols):
-            self.parent = parent
-            self.side = side
-
-            # set data label attribute
-            if not isinstance(label, str):
-                raise TypeError(f"'{self.side}_label' must be a string, "
-                                f"not: {type(label).__name__}.")
-            self.label = label
-
-            # verify 'data' argument is of the correct type and then make a copy
-            if isinstance(data, pd.DataFrame):
-                self.df = data.copy(deep=True)
-            elif isinstance(data, pd.Series):
-                self.df = data.to_frame()
-            else:
-                raise TypeError(f"'{self.side}' must be a pandas DataFrame, "
-                                f"or Series, not {type(data).__name__}.")
-
-            # if there is already an index then reset it to column(s)
-            index_names = odd.get_index_names(self.df)
-            default_index_name = ['index']
-
-            for name in (index_names or default_index_name):
-                if name in self.df.columns:
-                    raise ValueError(f"'{self.side}' index name '{name}' "
-                                     "conflicts with an existing column name. "
-                                     "Please rename the column or index.")
-
-            if index_names:
-                self.df.reset_index(inplace=True)
-            else:
-                self.df.index.names = default_index_name
-
-            # verify there are no duplicate columns which can cause issues
-            odd.verify_no_duplicates(df=self.df, label=self.label, attr='columns')
-
-            # drop duplicate rows
-            self.df.drop_duplicates(inplace=True)
-
-            # infer data types
-            if self.parent.infer_dtypes:
-                self.df = odd.infer_data_types(self.df)
-
-            # set index to the column(s) you intend to join on
-            if self.parent.join_on is not None:
-                self.df.set_index(self.parent.join_on, inplace=True)
-
-            # verify there are no duplicate index values which can cause issues
-            if not self.parent.allow_duplicates:
-                odd.verify_no_duplicates(df=self.df, label=self.label, attr='index')
-
-            # decompose ref_cols argument
-            self.ref_cols, self.ref_def, self.ref_map = self.parse_ref_cols(ref_cols)
-
-            # create pd.DataFrame with labeled reference columns
-            self.ref_df = self.get_labeled_subset(self.ref_cols)
-
-
-        #╭-----------------------------------╮
-        #| Instance Methods                  |
-        #╰-----------------------------------╯
-
-        def add_label(self, column_name):
-            ''' add label to single column name '''
-            return self.parent.label_template\
-                .format(**dict(label=self.label, name=column_name))
-
-
-        def get_labeled_subset(self, column_names=None):
-            ''' returns subset of self.df with labeled column names '''
-            if column_names is None: column_names = self.df.columns.tolist()
-            renames = {k: self.add_label(k) for k in column_names}
-            df = self.df[column_names].rename(columns=renames)
-            return df
-
-
-        def parse_ref_cols(self, ref_cols):
-            ''' derive ref_cols, ref_def, and ref_map instance attributes '''
-            ref_cols = [] if ref_cols is None else odd.to_iter(ref_cols)
-            arg_name = f"'{self.side}_ref'"
-            ref_all, ref_map = [], {}
-
-            for x in ref_cols:
-                if isinstance(x, str):
-                    ref_all.append(x)
-
-                elif isinstance(x, dict):
-                    for k in x:
-                        v = odd.to_iter(x[k])
-                        invalid_types = list(set([type(e).__name__ for e in v
-                                                  if not isinstance(e, str)]))
-                        if invalid_types:
-                            raise TypeError(f"{arg_name} dictionary values must be strings"
-                                            f" or lists of strings, not: {invalid_types}")
-                        else:
-                            ref_map.setdefault(k, []).extend(v)
-
-                else:
-                    raise TypeError(f"{arg_name} may only include strings or "
-                                    f"dictionaries, not: {type(x).__name__}")
-
-            add_labels = lambda x: set(map(self.add_label, x))
-            ref_def = set(ref_all)
-
-            for k, v in ref_map.items():
-                ref_all.extend(v)
-                ref_map[k] = add_labels(set(v).union(ref_def))
-
-            # drop duplicates but retain order
-            ref_all = list(dict.fromkeys(ref_all))
-
-            missing_ref_cols = [x for x in ref_all if x not in self.df.columns]
-
-            if missing_ref_cols:
-                raise KeyError(f"{arg_name} includes column names not found in "
-                               f"'{self.side}': {missing_ref_cols}")
-
-            return ref_all, add_labels(ref_def), ref_map
+    @property
+    def reports(self):
+        ''' reports with summary prepended '''
+        return {self.summary_name: self.summary} | self._reports
 
 
     #╭-------------------------------------------------------------------------╮
     #| Instance Methods                                                        |
     #╰-------------------------------------------------------------------------╯
 
+    def _get_summary_frame(self):
+        ''' returns summary template '''
+        df = pd.DataFrame(
+            columns=[
+                'Dimension',
+                'Differences',
+                'Matches',
+                'Total',
+                'Match Rate %'
+                ],
+            )
+        df.index.name = 'Comparison'
+        return df
+
+
+    def _update_summary(self, label, dim, diffs, total):
+        ''' updates summary '''
+        columns = ['Dimension','Differences','Total']
+        self.summary.loc[label, columns] = dim, diffs, total
+
+
+    def _compute_summary_metrics(self):
+        ''' computes final summary metrics '''
+        df = self.summary
+        df['Matches'] = df['Total'] - df['Differences']
+        df['Match Rate %'] = df['Matches'] / df['Total']
+
+
     def _compile_reports(self):
-        '''
-        Description
-        ------------
-        Compares left and right DataFrames and stores results in 'results'
-        dictionary.
+        ''' compares left and right datasets and compiles results in reports
+            dictionary '''
 
-        Parameters
-        ------------
-        ...
+        label_verbiage = f'DataFrames {0!r} and {1!r}'\
+            .format(self.left.label, self.right.label)
 
-        Returns
-        ------------
-        results : dict
-            see self.reports documentation
-        '''
-
-        def compare_values(left, right):
-
-            @odd.ignore_nan
-            def ignore_whitespace(x):
-                if not isinstance(x, str): return x
-                out = x.strip()
-                if out == '': out = np.nan
-                return out
-
-            if self.ignore_whitespace:
-                left, right = map(ignore_whitespace, (left, right))
-
-            if pd.isnull(left) and pd.isnull(right):
-                return np.nan
-
-            if left != right:
-                if type(left) != type(right):
-                    return 'type'
-                try:
-                    if isinstance(left, str) and not self.compare_strings_as_floats: raise
-                    if abs(float(left) - float(right)) <= self.tolerance: return np.nan
-                except:
-                    pass
-                return 'value'
-            else:
-                return np.nan
-
-
-        def calculate_delta(name, left, right):
-            try:
-                return left - right
-            except:
-                if odd.column_name_is_datelike(name):
-                    try:
-                        return pd.to_datetime(left) - pd.to_datetime(right)
-                    except:
-                        pass
-            return np.nan
-
-
-        reports = {}
-        equal_verbiage = f"DataFrames '{self.left.label}' and '{self.right.label}' are equal"
+        equal_verbiage = f'{label_verbiage} are equal.'
 
         if self.left.df.equals(self.right.df):
-            if self.verbose: print(f'{equal_verbiage} - 1st pass')
-            return reports
+            if self.verbose:
+                print(f'{equal_verbiage} - 1st pass')
+            return
 
         if self.verbose:
-            print(f"Comparing DataFrames '{self.left.label}' vs '{self.right.label}'")
+            print(f'Comparing {label_verbiage}')
 
-        log = pd.DataFrame(
-            columns=['Dimension','Differences','Matches','Total','Match Rate %'],
-            dtype='float'
-            )
-        log.index.name = 'Comparison'
-        reports['Compare Summary'] = log
-
-        dfs = (self.left, self.right)
+        objs = [obj for obj in self._iter_objs()]
 
         if self.include_data:
-            for obj in dfs:
-                reports[f'{obj.label} data'] = obj.df
+            for obj in objs:
+                self._reports[f'{obj.label} data'] = obj.df
 
         sheet_name = '{0} {1} not in {2}'
-        if not self.matches_only:
-            for axis in ('cols','rows'):
-                for i in range(2):
-                    df = getattr(self, f'_find_missing_{axis}')(dfs[i].df, dfs[i - 1].df)
-                    k = sheet_name.format(dfs[i].label, axis, dfs[i - 1].label)
-                    if not df.empty:
-                        if self.verbose: print(f'\t• {k}')
-                        reports[k] = df
-                        log.loc[k, ['Dimension','Differences','Total']] = \
-                            'columns' if axis == 'cols' else axis, len(df), \
-                            len(dfs[i].df if axis == 'rows' else dfs[i].df.columns)
 
-        master = self.left.get_labeled_subset(self.shared_columns).join(
-                 self.right.get_labeled_subset(self.shared_columns), how='inner')
+        # compare columns and rows
+        for axis in ('cols','rows'):
+            dim = 'columns' if axis == 'cols' else axis
 
-        if not master.empty:
+            if dim not in self.dimensions:
+                continue
 
-            for k in self.shared_columns:
+            attr = f'_find_missing_{axis}'
+            axis_index = 0 if axis == 'rows' else 1
 
-                df = master[[self.left.add_label(k), self.right.add_label(k)]]
-                if self.allow_duplicates: df = odd.drop_duplicates(df)
-                left_k, right_k = df.columns.tolist()
-                master.drop(df.columns, axis=1, inplace=True)
+            for i in (0, 1):
+                df = getattr(self, attr)(
+                    objs[i].df,
+                    objs[i - 1].df
+                    )
 
-                k2 = self.label_template.format(**dict(label='compare', name=k))
-                df[k2] = list(map(compare_values, df[left_k], df[right_k]))
-                df.dropna(subset=[k2], inplace=True)
-                if not self.include_diff_type: df.drop(k2, axis=1, inplace=True)
+                k = sheet_name.format(
+                    objs[i].label,
+                    axis,
+                    objs[i - 1].label
+                    )
 
                 if not df.empty:
-                    if self.ref_df is not None:
-                        ref_cols = [
-                            x for x in self.ref_df.columns
-                            if x in self.ref_map.get(k, self.ref_def)
-                            and x not in df.columns
-                            ]
+                    self._reports[k] = df
 
-                        if ref_cols:
-                            refs = self.ref_df[ref_cols]
-                            if self.allow_duplicates: refs = odd.drop_duplicates(refs)
-                            df = refs.join(df, how='inner')
+                    self._update_summary(
+                        label=k,
+                        dim=dim,
+                        diffs=len(df),
+                        total=objs[i].df.shape[axis_index]
+                        )
 
-                    if self.include_delta:
-                        k3 = self.label_template.format(**dict(label='delta', name=k))
-                        df[k3] = list(map(calculate_delta, [k] * len(df), df[left_k], df[right_k]))
-                        if pd.isnull(df[k3]).all(): df.drop(k3, axis=1, inplace=True)
+                    if self.verbose:
+                        print(f'\t• {k}')
 
-                    if self.verbose: print(f'\t• {k}')
+        # compare values
+        if 'values' in self.dimensions:
+            self._find_value_differences()
 
-                    reports[k] = df
-                    log.loc[k, ['Dimension','Differences','Total']] = \
-                        'values', len(df), len(master)
-
-        if log.empty:
-            reports.clear()
-            if self.verbose: print(f'{equal_verbiage} - 2nd pass')
+        # compute summary metrics
+        if self.summary.empty:
+            if self.verbose:
+                print(f'{equal_verbiage} - 2nd pass')
         else:
-            log['Matches'] = log['Total'] - log['Differences']
-            log['Match Rate %'] = log['Matches'] / log['Total']
+            self._compute_summary_metrics()
 
-        return reports
+
+    def _iter_objs(self):
+        ''' iterate over data wrapper objects from left to right '''
+        for obj in (self.left, self.right):
+            yield obj
 
 
     def _find_missing_cols(self, a, b):
         ''' find missing columns '''
-        b_columns = set(b.columns).union(self.ignored_columns)
-        data = [[k, str(a[k].dtype)] for k in a.columns if k not in b_columns]
-        df = pd.DataFrame(data, columns=['Missing Column', 'Data Type'])
+        b_columns = set(b.columns).union(self.ignore_columns)
+        data = [
+            [k, str(a[k].dtype)]
+            for k in a.columns
+            if k not in b_columns
+            ]
+        columns = ['Missing Column','Data Type']
+        df = pd.DataFrame(data=data, columns=columns)
         return df
 
 
     def _find_missing_rows(self, a, b):
         ''' find missing rows '''
-        return odd.join_left_only(a, b.drop(b.columns, axis=1))
+        return odd.join_left_only(a, b.drop(columns=b.columns))
 
 
     def _find_shared_cols(self):
         ''' find shared columns '''
         out = self.left.df.columns\
             .intersection(self.right.df.columns)\
-            .difference(self.ignored_columns)\
+            .difference(self.ignore_columns)\
             .tolist()
         return odd.natural_sort(out)
 
@@ -546,22 +387,162 @@ class PandasCompare(object):
         return out
 
 
+    def _find_value_differences(self):
+        ''' find value differences '''
+
+        columns = self.shared_columns[:]
+
+        if not columns:
+            return
+
+        df = pd.concat(
+            objs=[
+                obj.get_labeled_subset(columns)
+                for obj in self._iter_objs()
+                ],
+            axis=1,
+            join='inner'
+            )
+
+        if df.empty:
+            return
+
+        for column in columns:
+            labeled = [
+                obj.add_label(column)
+                for obj in self._iter_objs()
+                ]
+            self._compare_column_values(
+                column=column,
+                df=df[labeled]
+                )
+
+
+    def _compare_column_values(self, column, df):
+        ''' compares column (series) values '''
+
+        left_col, right_col = df.columns.tolist()
+        total = len(df)
+
+        if self.allow_duplicates:
+            df = odd.drop_duplicates(df)
+
+        diff_col = self.label_template.format(
+            **dict(label='compare', name=column)
+            )
+
+        df[diff_col] = list(map(
+            self._compare_values,
+            df[left_col],
+            df[right_col]
+            ))
+
+        df.dropna(subset=[diff_col], inplace=True)
+
+        if not self.include_diff_type:
+            df.drop(columns=diff_col, inplace=True)
+
+        if df.empty: return
+
+        if self.ref_df is not None:
+            ref_cols = [
+                x for x in self.ref_df.columns
+                if x in self.ref_map.get(column, self.ref_def)
+                and x not in df.columns
+                ]
+
+            if ref_cols:
+                refs = self.ref_df[ref_cols]
+                if self.allow_duplicates:
+                    refs = odd.drop_duplicates(refs)
+                df = refs.join(df, how='inner')
+
+        if self.include_delta:
+            delta_col = self.label_template.format(
+                **dict(label=self.delta_label, name=column)
+                )
+
+            df[delta_col] = list(map(
+                self._calculate_delta,
+                [column] * len(df),
+                df[left_col],
+                df[right_col]
+                ))
+
+            if df[delta_col].isnull().all():
+                df.drop(columns=delta_col, inplace=True)
+
+        self._reports[column] = df
+
+        self._update_summary(
+            label=column,
+            dim='values',
+            diffs=len(df),
+            total=total
+            )
+
+        if self.verbose:
+            print(f'\t• {column}')
+
+
+    def _compare_values(self, left, right):
+        ''' compares two values '''
+
+        @odd.ignore_nan
+        def ignore_whitespace(x):
+            if isinstance(x, str):
+                return x.strip() or np.nan
+            return x
+
+        if self.ignore_whitespace:
+            left, right = [
+                ignore_whitespace(x)
+                for x in (left, right)
+                ]
+
+        if self.try_numeric:
+            left, right = [
+                pd.to_numeric(x, errors='ignore')
+                for x in (left, right)
+                ]
+
+        if pd.isnull(left) and pd.isnull(right):
+            return np.nan
+
+        if left == right:
+            return np.nan
+
+        if type(left) != type(right):
+            return 'type'
+
+        if not self.try_numeric and isinstance(left, str):
+            return 'value'
+
+        try:
+            delta = abs(float(left) - float(right))
+            if delta <= self.tolerance:
+                return np.nan
+        except (TypeError, ValueError):
+            pass
+
+        return 'value'
+
+
     def to_excel(self, file=None, empty_ok=False, **kwargs):
         '''
         Description
         ------------
-        Exports self.reports to Excel file.
+        Exports compare reports to an Excel file.
 
         Parameters
         ------------
         file : None | str | ExcelFile
-            Excel file to which reports will be exported
-                • None ➜ default file name is assigned and the file is saved
-                          in the data path (see get_data_path documentation).
-                • str ➜ treated as a file path and passed to pathpilot.File
-                • ExcelFile ➜ pathpilot.ExcelFile object or a derivative
+            File to which reports will be exported
+                • None ➜ a generic default file name is used
+                • str ➜ desired file path
+                • ExcelFile ➜ pathpilot.ExcelFile object (or a derivative)
         empty_ok : bool
-            determines behavior when self.reports is empty (i.e. the compare
+            Determines behavior when there are no reports (i.e. the compare
             found no differences).
                 • True ➜ Excel file is created
                 • False ➜ Excel file is not created
@@ -572,41 +553,80 @@ class PandasCompare(object):
         ------------
         None
         '''
-        empty_msg = 'No differences found'
-        if not self.reports and not empty_ok:
+        empty_msg = 'No differences found.'
+        is_empty = self.summary.empty
+
+        if is_empty and not empty_ok:
             if self.verbose:
-                print(f'Skipping export to Excel - {empty_msg.lower()}.')
+                print(f'Skipping Excel export. {empty_msg}')
             return
 
         if file is None:
-            file = self.file_name
+            file = f"Compare {self.left.label} vs {self.right.label}.xlsx"
 
-        if file is None:
-            file_name = f"Compare {self.left.label} vs {self.right.label}.xlsx"
-            folder = pp.get_data_path().join(self.__class__.__name__, read_only=False)
-            file = folder.join(file_name).timestamp(
-                fmt='%Y-%m-%d %I.%M.%S %p',
-                loc='suffix',
-                encase=True
+        file = file_factory(file, read_only=False)
+
+        if file.ext != 'xlsx':
+            raise ValueError(
+                "File extension must be 'xlsx', "
+                f"not: '{file.ext}'"
                 )
-        else:
-            file = pp.File(file)
-            if file.ext != 'xlsx':
-                raise ValueError(f"file extension must be 'xlsx', not: '{file.ext}'")
 
-        if self.reports:
+        if is_empty:
+            df = pd.DataFrame({'Note': [empty_msg]})
+            file.name += ' (empty)'
+            file.save({self.summary_name: df})
+        else:
             # kwargs.setdefault('autofilter', True)
             file.save(self.reports, **kwargs)
-        else:
-            file.name += ' (empty)'
-            file.save({'Compare Summary': pd.DataFrame({'Note': [empty_msg + '.']})})
 
 
-    def export_to_excel(self, *args, **kwargs):
-        warnings.warn(
-            "The 'export_to_excel()' method is deprecated and will be removed "
-            "in a future release. Use 'to_excel()' instead.",
-            DeprecationWarning,
-            stacklevel=2
+    #╭-------------------------------------------------------------------------╮
+    #| Static Methods                                                          |
+    #╰-------------------------------------------------------------------------╯
+
+    @staticmethod
+    def _resolve_dims(dims):
+        ''' validates dimensions and returns them as a set '''
+        whitelist = ['rows','columns','values']
+
+        if dims is None:
+            return set(whitelist)
+
+        if isinstance(dims, str):
+            dims = [dims]
+        elif isinstance(dims, (tuple, set)):
+            dims = list(dims)
+
+        odd.validate_value(
+            value=dims,
+            attr='dimensions',
+            types=list,
+            empty_ok=False
             )
-        self.to_excel(*args, **kwargs)
+
+        for value in dims:
+            odd.validate_value(
+                value=value,
+                attr='dimension values',
+                types=str,
+                whitelist=whitelist
+                )
+
+        return set(dims)
+
+
+    @staticmethod
+    def _calculate_delta(name, left, right):
+        ''' attempts to calculate the difference between two values '''
+        try:
+            return left - right
+        except:
+            if odd.column_name_is_datelike(name):
+                try:
+                    left, right = map(pd.to_datetime, (left, right))
+                    return left - right
+                except (TypeError, ValueError):
+                    pass
+
+        return np.nan
