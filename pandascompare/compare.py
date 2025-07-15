@@ -223,15 +223,16 @@ class PandasCompare(object):
 
     def _get_summary_frame(self):
         ''' returns summary template '''
-        df = pd.DataFrame(
-            columns=[
-                'Dimension',
-                'Differences',
-                'Matches',
-                'Total',
-                'Match Rate %'
-                ],
-            )
+
+        dtypes = {
+            'Dimension': 'string',
+            'Differences': 'Int64',
+            'Matches': 'Int64',
+            'Total': 'Int64',
+            'Match Rate %': 'float64'
+            }
+
+        df = pd.DataFrame(columns=list(dtypes)).astype(dtypes)
         df.index.name = 'Comparison'
         return df
 
