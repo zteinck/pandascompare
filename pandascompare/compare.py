@@ -254,7 +254,7 @@ class PandasCompare(object):
         ''' compares left and right datasets and compiles results in reports
             dictionary '''
 
-        label_verbiage = f'DataFrames {0!r} and {1!r}'\
+        label_verbiage = 'DataFrames {0!r} and {1!r}'\
             .format(self.left.label, self.right.label)
 
         equal_verbiage = f'{label_verbiage} are equal.'
